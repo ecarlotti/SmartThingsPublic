@@ -6,13 +6,14 @@
 */
 
 metadata {
-	definition (name: "RGBGenie Touch Panel Child ZW-3001", namespace: "ecarlotti", author: "RGBGenie") {
+	definition (name: "RGBGenie Touch Panel Child ZW-3001", namespace: "ecarlotti", author: "ecarlotti") {
 		capability "Switch"
 		capability "SwitchLevel"
 		capability "Button"
 		capability "Actuator"
         
         attribute "sceneCapture", "boolean"
+        attribute "zone", "number"
 	}
     
     simulator {
@@ -20,7 +21,7 @@ metadata {
     }
     
     tiles(scale: 2) {
-        multiAttributeTile(name:"switch", type: "lighting", width: 3, height: 2, canChangeIcon: true) {
+        multiAttributeTile(name:"switch", type: "lighting", width: 6, height: 4, canChangeIcon: true) {
             tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
                 attributeState "on", label:'${name}', action:"switch.off", icon:"st.lights.philips.hue-single", backgroundColor:"#00a0dc", nextState:"turningOff"
                 attributeState "off", label:'${name}', action:"switch.on", icon:"st.lights.philips.hue-single", backgroundColor:"#ffffff", nextState:"turningOn"
@@ -32,9 +33,8 @@ metadata {
             }
         }
     
-//        main(["switch"])
-//    	details(["switch", "level"])
-        
+        main(["switch"])
+    	details(["switch"])
     }    
 }
 
@@ -144,16 +144,11 @@ def enableSceneCapture(value) {
 	log.debug("enableSceneCapture: ${value}")
 	state.sceneCapture=value
     sendEvent(name: "sceneCapture", value: value) 
-//    if (value) {
-//    	sendEvent(name: "numberOfButtons", value: 0) 
-//    } else {
-//    	sendEvent(name: "numberOfButtons", value: 3) 
-//    }
 }
 
-def defineMe() {
-	log.debug("defineMe()")
-//	sendEvent(name: "numberOfButtons", value: 3)
+def defineMe(zoneId) {
+	log.debug("defineMe($zoneId)")
+	sendEvent(name: "zone", value: zoneId)
 	sendEvent(name: "level", value: 0, unit: "%")
 	sendEvent(name: "switch", value: "off")
 }
@@ -204,16 +199,19 @@ def setLevel(level, duration) {
 /////////////////////////////////////////////////////////////////////////////////////////////
 //                                  Local (private) Methods                                //
 /////////////////////////////////////////////////////////////////////////////////////////////
-private getCOLOR_TEMP_MIN() { 2700 }
-private getCOLOR_TEMP_MAX() { 6500 }
-private getCOLOR_TEMP_DIFF() { COLOR_TEMP_MAX - COLOR_TEMP_MIN }
-
 private dimmerEvents(physicalgraph.zwave.Command cmd) {
+	def zone=device.currentValue("zone")
+	def zone_members=parent.getDevices(zone)
+    log.debug("${device.label} --> devices on zone $zone are: ${zone_members}")
+    
 	def value = (cmd.value ? "on" : "off")
 	sendEvent(name: "switch", value: value, descriptionText: "$device.displayName was turned $value")
+	zone_members.each { sendEvent(it.toInteger(), [name: "switch", value: value, descriptionText: "$device.displayName was turned $value"]) }
+    
 	if (cmd.value) {
 		if (cmd.value>100) cmd.value=100
 		sendEvent(name: "level", value: cmd.value == 99 ? 100 : cmd.value , unit: "%")
+		zone_members.each { sendEvent(it.toInteger(), [name: "level", value: cmd.value == 99 ? 100 : cmd.value , unit: "%"]) }
 	}
 }
 

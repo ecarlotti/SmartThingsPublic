@@ -5,7 +5,7 @@
  *  Updated on 2020-07-03 by ELC - Adapted for RGBGenie ZW-3001 only
  */
 metadata {
-	definition (name: "RGBGenie Touch Panel ZW-3001", namespace: "ecarlotti", author: "RGBGenie") {
+	definition (name: "RGBGenie Touch Panel ZW-3001", namespace: "ecarlotti", author: "ecarlotti") {
         capability "Refresh"
         capability "Actuator"
         capability "Configuration"
@@ -14,7 +14,7 @@ metadata {
         attribute "associationsG2", "string"
         attribute "associationsG3", "string"
         attribute "associationsG4", "string"
-
+        
 		fingerprint mfr:"0330", prod:"0301", model:"A109", deviceJoinName: "Touch Panel"
     }
     
@@ -23,60 +23,15 @@ metadata {
     }
     
     tiles(scale: 2) {
-/*
-		valueTile("associationsG1", "device.associationsG1", decoration: "flat", width: 3, height: 1) {
-            state "associationsG1", label:"G1: ${currentValue}", defaultState: true
-        }    
-        valueTile("associationsG2", "device.associationsG2", decoration: "flat", width: 3, height: 1) {
-            state "associationsG2", label:"Z1: ${currentValue}", defaultState: true
-        }
-        valueTile("associationsG3", "device.associationsG3", decoration: "flat", width: 3, height: 1) {
-            state "associationsG3", label:"Z2: ${currentValue}", defaultState: true
-        }        
-        valueTile("associationsG4", "device.associationsG4", decoration: "flat", width: 3, height: 1) {
-            state "associationsG4", label:"Z2: ${currentValue}", defaultState: true
-        }
-
-		standardTile("associations", "device.status", decoration: "flat", width: 3, height:1) {
-        	state "default", label:'Association'        
-        }
-        standardTile("states", "device.status", decoration: "flat", width: 3, height:1) {
-        	state "default", label:'States'
-        }
-    	standardTile("zone1", "device.status", decoration: "flat", width: 3, height:1) {
-        	state "default", label:'Zone 1'
-        }
-        standardTile("zone2", "device.status", decoration: "flat", width: 3, height:1) {
-        	state "default", label:'Zone 2'
-        }
-        standardTile("zone3", "device.status", decoration: "flat", width: 3, height:1) {
-        	state "default", label:'Zone 3'
-        }
-        
-        childDeviceTile("zone1switch", "zone1", decoration: "flat", width: 3, height:1, childTileName: "switch") 
-        childDeviceTile("zone1level", "zone1", decoration: "flat", width: 3, height:1, childTileName: "level") 
-        childDeviceTile("zone2switch", "zone2", decoration: "flat", width: 3, height:1, childTileName: "switch") 
-        childDeviceTile("zone2level", "zone2", decoration: "flat", width: 3, height:1, childTileName: "level") 
-        childDeviceTile("zone3switch", "zone3", decoration: "flat", width: 3, height:1, childTileName: "switch") 
-        childDeviceTile("zone3level", "zone3", decoration: "flat", width: 3, height:1, childTileName: "level")
-        
-    	details(["associations","states","associationsG2", "associationsG3", "associationsG4", "associationsG1", 
-        	"zone1", "states", 
-            "zone1switch", "zone1level",  
-        	"zone2", "states", 
-            "zone2switch", "zone2level",             
-        	"zone3", "states", 
-            "zone3switch", "zone3level",             
-        ])
-*/        
 
 		standardTile("status", "device.status", decoration: "flat", width: 3, height:1) {
         	state "default", label:'Status'
         }
-		childDeviceTiles("zones")
+        
+        childDeviceTiles("zones")
  
- 		main "status"
-  		details(["status", "zones"])
+ 		main(["status"])
+		details(["status", "zones"])
     }
     
     preferences {
@@ -91,40 +46,57 @@ metadata {
 /////////////////////////////////////////////////////////////////////////////////////////////
 def installed() {
 	log.debug("BEGIN installed()")
-    createChildDevices()
     initialize()
     log.debug("END installed()")
 }
 
 def updated() {
 	log.debug("BEGIN updated()")
-    def cmds=[]
 
-	for (int i = 1 ; i <= 3; i++) {
-        def child=null
-        children.each { it->
-            if (it.deviceNetworkId=="${device.deviceNetworkId}-$i") {
-                child=it
+	def children = getChildDevices()
+    children.each { child ->
+    	log.debug "child ${child.displayName} has deviceNetworkId ${child.deviceNetworkId}"
+	}	
+    def cmds=[]
+    for (int i = 1 ; i <= 3; i++) {
+        if (!children.any { it -> it.deviceNetworkId == "${device.deviceNetworkId}-$i" } ) {
+        	// Save the Touch Panel's device name at the time the child devices were created
+            state.oldLabel = device.label
+            def child=addChildDevice("RGBGenie Touch Panel Child ZW-3001", "${device.deviceNetworkId}-$i", null, [completedSetup: true, label: "${device.displayName} (Zone$i)", isComponent: true, componentName: "zone$i", componentLabel: "Zone $i"])
+            if (child) {
+                child.defineMe(i)
+            }        
+        } else if (device.label != state.oldLabel) {
+        	// The Touch Panel component was RENAMED, rename the child devices accordingly
+            children.each {
+                def newLabel = "${device.displayName} (Zone${zoneNumber(it.deviceNetworkId)})"
+                it.setLabel(newLabel)
             }
-        }
-        if(child) {
-            log.debug "updating child: ${child.deviceNetworkId} setting sceneMode: " + settings."sceneMode$i"
-            child.enableSceneCapture(settings."sceneMode$i")
+            state.oldLabel = device.label
         }
         addHubMultiChannel(i).each { cmds << it }
     }
 
 	processAssociations().each { cmds << it }
     pollAssociations().each { cmds << it }
-    log.debug "updated: ${cmds}"
+    log.debug "update: ${cmds}"
 	log.debug("END updated()")
-    response(commands(cmds))
+
+	response(commands(cmds))
 }
 
 def configure() {
 	log.debug("BEGIN configure()")
     initialize()
 	log.debug("END configure()")
+}
+
+def refresh() {
+	log.debug("BEGIN refresh()")
+    def cmds=[]
+    cmds+=pollAssociations()
+    response(commands(cmds))    
+	log.debug("END refresh()")
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -149,11 +121,11 @@ def parse(String description) {
  * 0x85 V2 COMMAND_CLASS_ASSOCIATION
  * 0x73 V1 COMMAND_CLASS_POWERLEVEL
  * 0x5A V1 COMMAND_CLASS_DEVICE_RESET_LOCALLY
- * 0x7A V4 COMMAND_CLASS_FIRMWARE_UPDATE_MD
+ * 0x7A V4 COMMAND_CLASS_FIRMWARE_UPDATE_MD 
  *
  * Supported Command Classes (UNdocumented):
  *
- * 0x60 V4 COMMAND_CLASS_MULTI_CHANNEL
+ * 0x60 V4 COMMAND_CLASS_MULTI_CHANNEL (SmartThings only supports V3)
  *
  */
     log.debug("parse called for: ${description}")
@@ -202,12 +174,13 @@ def zwaveEvent(physicalgraph.zwave.commands.multichannelassociationv2.MultiChann
     state."zwaveAssociationMultiG${cmd.groupingIdentifier}"="${cmd.nodeId}"
 }
 
+// Handles all Z-Wave commands we don't know we are interested in
 def zwaveEvent(physicalgraph.zwave.Command cmd) {
-    if (logEnable) log.debug "skip:${cmd}"
+    createEvent([:])
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.associationv2.AssociationReport cmd) {
-    if (logEnable) log.debug "${device.label?device.label:device.name}: ${cmd}"
+    log.debug "${device.label?device.label:device.name}: ${cmd}"
     def temp = []
     if (cmd.nodeId != []) {
        cmd.nodeId.each {
@@ -224,16 +197,21 @@ def zwaveEvent(physicalgraph.zwave.commands.associationv2.AssociationReport cmd)
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.associationv2.AssociationGroupingsReport cmd) {
-    if (logEnable) log.debug "${device.label?device.label:device.name}: ${cmd}"
+    log.debug "${device.label?device.label:device.name}: ${cmd}"
     sendEvent(name: "groups", value: cmd.supportedGroupings)
     log.info "${device.label?device.label:device.name}: Supported association groups: ${cmd.supportedGroupings}"
     state.associationGroups = cmd.supportedGroupings
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
+//                                Device-Specific Commands                                 //
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////////////////////
 //                                 Device-Specific Methods                                 //
 /////////////////////////////////////////////////////////////////////////////////////////////
 def createChildDevices() {
+	state.oldLabel = device.label
 	def cmds=[]
 	for (i in 1..3) {
         def child=addChildDevice("RGBGenie Touch Panel Child ZW-3001", 
@@ -248,7 +226,7 @@ def createChildDevices() {
                                  ])
                                  
         if (child) {
-            child.defineMe()
+            child.defineMe(i)
         } else {
         	log.error("ERROR adding child device $i")
         }
@@ -256,10 +234,8 @@ def createChildDevices() {
 		addHubMultiChannel(i).each { cmds << it }
     }
     
-	def children = getChildDevices()
-    children.each { child ->
-    	log.debug "child ${child.displayName} has deviceNetworkId ${child.deviceNetworkId}"
-	}    
+    log.debug("createChildDevices: Executing commands ${cmds}...")
+    return cmds    
 }
 
 def initialize() {
@@ -268,14 +244,6 @@ def initialize() {
     cmds+=pollAssociations()
     commands(cmds)
 	log.debug("END initialize()")
-}
-
-def refresh() {
-	log.debug("BEGIN refresh()")
-    def cmds=[]
-    cmds+=pollAssociations()
-    response(commands(cmds))    
-	log.debug("END initializa()")
 }
 
 def pollAssociations() {
@@ -363,11 +331,25 @@ def processAssociations(){
     return cmds
 }
 
+def getDevices(__zone) {
+	// Zones are groups offset by 1
+    //
+    // Group 1 is the Lifeline, we can't touch it...
+    // Zone 1 = Group 2, Zone 2 = Group 3, Zone 3 = Group 4
+	def group = ++__zone
+	def associationsGRP = device.currentValue("associationsG$group")
+    def group_devices = associationsGRP.tokenize(",[]") 
+    return group_devices
+}
 /////////////////////////////////////////////////////////////////////////////////////////////
 //                                  Local (private) Methods                                //
 /////////////////////////////////////////////////////////////////////////////////////////////
 private getDRIVER_VER() { "0.001" }
 private getCMD_CLASS_VERS() { [0x33:3,0x26:3,0x85:2,0x8E:2,0x71:8,0x20:1] }
+
+private zoneNumber(String dni) {
+	dni.split("-")[-1] as Integer
+}
 
 private command(physicalgraph.zwave.Command cmd) {
     return cmd.format()
@@ -375,5 +357,9 @@ private command(physicalgraph.zwave.Command cmd) {
 
 private commands(commands, delay=200) {
     delayBetween(commands.collect{ command(it) }, delay)
+}
+
+private buildOffOnEvent(cmd){
+	[zwave.basicV1.basicSet(value: cmd), zwave.switchMultilevelV3.switchMultilevelGet()]
 }
 
