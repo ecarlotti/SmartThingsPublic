@@ -9,13 +9,25 @@ metadata {
         capability "Refresh"
         capability "Actuator"
         capability "Configuration"
+        capability "Button"
+        capability "Switch"
+        
+        command "SceneCapture"
+        command "StopCapture"
+        command "SceneToggle"
 
 		attribute "associationsG1", "string"
         attribute "associationsG2", "string"
         attribute "associationsG3", "string"
         attribute "associationsG4", "string"
+        attribute "capture1", "enum", ["on", "off"]
+        attribute "capture2", "enum", ["on", "off"]
+        attribute "capture3", "enum", ["on", "off"]
+        attribute "scene1", "enum", ["on", "off"]
+        attribute "scene2", "enum", ["on", "off"]
+        attribute "scene3", "enum", ["on", "off"]
         
-		fingerprint mfr:"0330", prod:"0301", model:"A109", deviceJoinName: "Touch Panel"
+		fingerprint mfr:"0330", prod:"0301", model:"A109", deviceJoinName: "Touch Panel", role: 0x05
     }
     
     simulator {
@@ -24,20 +36,39 @@ metadata {
     
     tiles(scale: 2) {
 
-		standardTile("status", "device.status", decoration: "flat", width: 3, height:1) {
-        	state "default", label:'Status'
+		valueTile("status", "device.status", decoration: "flat", width: 6, height:1) {
+        	state "default", label:'${currentValue}'
         }
         
-        childDeviceTiles("zones")
+        standardTile("scene1Tile", "device.switch", width:2, height: 2, decoration: "flat") {
+            state "on", label:'${name}', action:"switch.off", icon:"st.lights.philips.hue-single", backgroundColor:"#00a0dc", nextState:"turningOff"
+            state "off", label:'${name}', action:"switch.on", icon:"st.lights.philips.hue-single", backgroundColor:"#ffffff", nextState:"turningOn"
+            state "turningOn", label:'${name}', action:"switch.off", icon:"st.lights.philips.hue-single", backgroundColor:"#00a0dc", nextState:"turningOff"
+            state "turningOff", label:'${name}', action:"switch.on", icon:"st.lights.philips.hue-single", backgroundColor:"#ffffff", nextState:"turningOn"
+        }
+
+		childDeviceTiles("zones")
+//		childDeviceTile("zone1switch", "zone1", decoration: "flat", width:6, height: 4, childTileName: "switch")
+//		childDeviceTile("zone1level", "zone1", decoration: "flat", width:6, height: 1, childTileName: "level")
+
+//		childDeviceTile("zone2switch", "zone2", decoration: "flat", width:6, height: 4, childTileName: "switch")
+//		childDeviceTile("zone2level", "zone2", decoration: "flat", width:6, height: 2, childTileName: "level")
+        
+//		childDeviceTile("zone3switch", "zone3", decoration: "flat", width:6, height: 4, childTileName: "switch")
+//		childDeviceTile("zone3level", "zone3", decoration: "flat", width:6, height: 2, childTileName: "level")
+        
  
- 		main(["status"])
-		details(["status", "zones"])
+// 		main(["status"])
+		details(["zones"])
+//		details(["zone1switch", "zone1level", "zone2switch", "zone2level", "zone3switch", "zone3level"])
+//		details(["zone1switch", "zone2switch", "zone3switch"])
     }
     
     preferences {
-        input name: "associationsZ1", type: "string", description: "To add nodes to zone associations use the Hexidecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 1 Associations", required: false
-        input name: "associationsZ2", type: "string", description: "To add nodes to zone associations use the Hexidecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 2 Associations", required: false
-        input name: "associationsZ3", type: "string", description: "To add nodes to zone associations use the Hexidecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 3 Associations", required: false
+    	section { input "switchesZ1", "capability.switch", title: "Zone 1 Devices", multiple: true, required: false, displayDuringSetup: true }
+        input name: "associationsZ1", type: "string", description: "To add nodes to zone associations use the Hexadecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 1 Associations", required: false
+        input name: "associationsZ2", type: "string", description: "To add nodes to zone associations use the Hexadecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 2 Associations", required: false
+        input name: "associationsZ3", type: "string", description: "To add nodes to zone associations use the Hexadecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 3 Associations", required: false
 	}
 }
 
@@ -65,16 +96,23 @@ def updated() {
             def child=addChildDevice("RGBGenie Touch Panel Child ZW-3001", "${device.deviceNetworkId}-$i", null, [completedSetup: true, label: "${device.displayName} (Zone$i)", isComponent: true, componentName: "zone$i", componentLabel: "Zone $i"])
             if (child) {
                 child.defineMe(i)
-            }        
+            }
+            def id = i * 16
+            addChildDevice("Momentary Button Tile", "${device.deviceNetworkId}-$id", null, [completedSetup: true, label: "${device.displayName} (Scene$i)", isComponent: true, componentName: "scene$i", componentLabel: "Scene $i"])
         } else if (device.label != state.oldLabel) {
         	// The Touch Panel component was RENAMED, rename the child devices accordingly
             children.each {
-                def newLabel = "${device.displayName} (Zone${zoneNumber(it.deviceNetworkId)})"
+            	def oldLabel = it.getLabel()
+                def newLabel = oldLabel.contains("Zone") ? "${device.displayName} (Zone${zoneNumber(it.deviceNetworkId)})" : "${device.displayName} (Scene${zoneNumber(it.deviceNetworkId)})" 
                 it.setLabel(newLabel)
             }
             state.oldLabel = device.label
         }
         addHubMultiChannel(i).each { cmds << it }
+    }
+    
+    for (int id in switchesZ1*.deviceNetworkId) {
+    	log.debug("Zone1 has device id: ${it.deviceNetworkId}")
     }
 
 	processAssociations().each { cmds << it }
@@ -174,11 +212,6 @@ def zwaveEvent(physicalgraph.zwave.commands.multichannelassociationv2.MultiChann
     state."zwaveAssociationMultiG${cmd.groupingIdentifier}"="${cmd.nodeId}"
 }
 
-// Handles all Z-Wave commands we don't know we are interested in
-def zwaveEvent(physicalgraph.zwave.Command cmd) {
-    createEvent([:])
-}
-
 def zwaveEvent(physicalgraph.zwave.commands.associationv2.AssociationReport cmd) {
     log.debug "${device.label?device.label:device.name}: ${cmd}"
     def temp = []
@@ -203,41 +236,47 @@ def zwaveEvent(physicalgraph.zwave.commands.associationv2.AssociationGroupingsRe
     state.associationGroups = cmd.supportedGroupings
 }
 
+// Handles all Z-Wave commands we don't know we are interested in
+def zwaveEvent(physicalgraph.zwave.Command cmd) {
+    createEvent([:])
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////
 //                                Device-Specific Commands                                 //
 /////////////////////////////////////////////////////////////////////////////////////////////
 
+def SceneCapture(sceneId) {
+	log.debug "Scene ${sceneId} Capture called..."
+	sendEvent(name: "capture${sceneId}", value: "on")
+}
+
+def StopCapture() {
+	log.debug "StopCapture called..."
+	sendEvent(name: "capture1", value: "off")
+	sendEvent(name: "capture2", value: "off")
+	sendEvent(name: "capture3", value: "off")	
+}
+
+def sceneActivate(sceneId) {
+   	def child=null
+    def children=getChildDevices()
+    children.each { 
+        if (it.deviceNetworkId=="${device.deviceNetworkId}-${sceneId}") {
+            child=it
+        }
+    }
+    if (child) {
+        def childName=child.getDisplayName()
+        log.debug("sceneActivate: Activating scene ${sceneId/16} on ${childName}")
+        child.push()
+    } else {
+        log.error("sceneActivate: No child found to process sceneActivation for endpoint ${sceneId}")
+    }
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////
 //                                 Device-Specific Methods                                 //
 /////////////////////////////////////////////////////////////////////////////////////////////
-def createChildDevices() {
-	state.oldLabel = device.label
-	def cmds=[]
-	for (i in 1..3) {
-        def child=addChildDevice("RGBGenie Touch Panel Child ZW-3001", 
-        						 "${device.deviceNetworkId}-$i", 
-                                 null, 
-                                 [
-                                 	completedSetup: true, 
-                                 	label: "${device.displayName} (Zone$i)", 
-                                    isComponent: true, 
-                                    componentName: "zone$i", 
-                                    componentLabel: "Zone $i"
-                                 ])
-                                 
-        if (child) {
-            child.defineMe(i)
-        } else {
-        	log.error("ERROR adding child device $i")
-        }
-
-		addHubMultiChannel(i).each { cmds << it }
-    }
-    
-    log.debug("createChildDevices: Executing commands ${cmds}...")
-    return cmds    
-}
-
 def initialize() {
 	log.debug("BEGIN initialize()")
     def cmds=[]
@@ -305,6 +344,7 @@ def processAssociations(){
                 }
             }
         }
+        
         if (parameterInput!=null) {
             parameterInput.minus("[").minus("]").split(",").each {
                 if (it!="") {
@@ -355,7 +395,7 @@ private command(physicalgraph.zwave.Command cmd) {
     return cmd.format()
 }
 
-private commands(commands, delay=200) {
+private commands(commands, delay=500) {
     delayBetween(commands.collect{ command(it) }, delay)
 }
 

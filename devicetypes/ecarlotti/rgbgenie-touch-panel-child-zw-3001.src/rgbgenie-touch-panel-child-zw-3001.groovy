@@ -3,12 +3,15 @@
 *   Code adapted from the one written for RGBGenie by Bryan Copeland
 *
 *   Updated 2020-07-03 Adapted for RGBGenie ZW-3001 only
+*
+*   Works with the SmartLighting App using mirror mode
+*
 */
 
 metadata {
 	definition (name: "RGBGenie Touch Panel Child ZW-3001", namespace: "ecarlotti", author: "ecarlotti") {
 		capability "Switch"
-		capability "SwitchLevel"
+		capability "Switch Level"
 		capability "Button"
 		capability "Actuator"
         
@@ -21,7 +24,7 @@ metadata {
     }
     
     tiles(scale: 2) {
-        multiAttributeTile(name:"switch", type: "lighting", width: 6, height: 4, canChangeIcon: true) {
+        multiAttributeTile(name:"rich-switch", type: "lighting", width: 6, height: 4, canChangeIcon: true) {
             tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
                 attributeState "on", label:'${name}', action:"switch.off", icon:"st.lights.philips.hue-single", backgroundColor:"#00a0dc", nextState:"turningOff"
                 attributeState "off", label:'${name}', action:"switch.on", icon:"st.lights.philips.hue-single", backgroundColor:"#ffffff", nextState:"turningOn"
@@ -29,12 +32,25 @@ metadata {
                 attributeState "turningOff", label:'${name}', action:"switch.on", icon:"st.lights.philips.hue-single", backgroundColor:"#ffffff", nextState:"turningOn"
             }
             tileAttribute ("device.level", key: "SLIDER_CONTROL") {
-                attributeState "level", action:"switch level.setLevel"
+                attributeState "level", action:"switch level.setLevel", defaultState: true
             }
         }
     
-        main(["switch"])
-    	details(["switch"])
+        standardTile("switch", "device.switch", decoration: "flat", height: 4, width: 6, canChangeIcon: true) {
+            state "off", label:'Off', action:"switch.on", icon:"st.switches.switch.off", backgroundColor:"#ffffff", nextState:"turningOn"
+            state "on", label:'On', action:"switch.off", icon:"st.switches.switch.on", backgroundColor:"#00a0dc", nextState:"turningOff"
+            state "turningOn", label:'Turning on', icon:"st.switches.switch.on", backgroundColor:"#00a0dc", nextState: "turningOff"
+            state "turningOff", label:'Turning off', icon:"st.switches.switch.off", backgroundColor:"#ffffff", nextState: "turningOn"
+        }
+		controlTile("level", "device.level", "slider", decoration: "flat", height: 2, width: 6, inactiveLabel: false) {
+			state "level", action:"switch level.setLevel"
+		}
+		standardTile("refresh", "device.switch", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
+			state "refresh", label:"", action:"refresh.refresh", icon:"st.secondary.refresh", defaultState: true
+		}
+
+        main(["rich-switch"])
+    	details(["switch", "level", "refresh"])
     }    
 }
 
@@ -43,16 +59,10 @@ metadata {
 /////////////////////////////////////////////////////////////////////////////////////////////
 def installed() {
 	log.debug("installed()")
-//    state.sceneCapture=true
 }
 
 def updated() {
 	log.debug("updated()")
-//	if (sceneCapture && getDataValue("deviceModel")=="41221") { 
-//		sendEvent(name: "numberOfButtons", value: 0) 
-//	} else if (!sceneCapture && getDataValue("deviceModel")!="41221") {
-//		sendEvent(name: "numberOfButtons", value: 3)
-//	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -60,10 +70,6 @@ def updated() {
 /////////////////////////////////////////////////////////////////////////////////////////////
 def parse(description) {
 	log.debug "parse: ${description}"
-}
-
-def zwaveEvent(physicalgraph.zwave.Command cmd) {
-    log.debug "Command: ${cmd}"
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd) {
@@ -93,31 +99,38 @@ def zwaveEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelS
 
 def zwaveEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelSet cmd) {
 	log.debug("SwitchMultilevelSet: ${cmd}")
-//	sendEvent(name: "level", value: cmd.value)
 	dimmerEvents(cmd)
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.sceneactuatorconfv1.SceneActuatorConfSet cmd) {
 	log.debug("SceneActuatorConfSet: ${cmd}")
-	if (state.sceneCapture) {
-		if (!state.scene) { state.scene=[:] }
-        state.scene["${cmd.sceneId}"]=["level": device.currentValue("level"), "switch": device.currentValue("switch")]
-	} else {
-		sendEvent(name: "pushed", value: (cmd.sceneId/16))
-	}
+
+/*
+	if (!state.scene) { state.scene=[:] }
+    def __scene = ["level": device.currentValue("level"), "switch": device.currentValue("switch")]
+    state.scene["${cmd.sceneId}"] = __scene
+    log.debug("SceneActuatorConfSet: scene[${cmd.sceneId}] = ${__scene}")
+*/
+
+	def sceneId = cmd.sceneId as Integer
+    parent.SceneCapture(sceneId/16)
+    runIn(5, parent.StopCapture)
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.sceneactivationv1.SceneActivationSet cmd) {
 	log.debug("SceneActivationSet: ${cmd}")
-	if (state.sceneCapture) {
-		if (!state.scene) { state.scene=[:] }
-		def scene=state.scene["${cmd.sceneId}"] 
-		scene.each { k, v ->
-			sendEvent(name: k, value: v)
-		}
-	} else {
-		sendEvent(name: "held", value: (cmd.sceneId/16))
-	}
+
+/*    
+    if (!state.scene) { state.scene=[:] }
+    def scene=state.scene["${cmd.sceneId}"]
+    scene.each { k, v ->
+        sendEvent(name: k, value: v)
+        log.debug("SceneActivationSet: sendEvent(name: ${k}, value:${v})")
+    }    
+*/
+
+    def sceneId = cmd.sceneId as Integer
+	parent.sceneActivate(sceneId)    
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.securityv1.SecurityMessageEncapsulation cmd) {
@@ -137,12 +150,16 @@ def zwaveEvent(physicalgraph.zwave.commands.securityv1.SecurityMessageEncapsulat
 	}
 }
 
+// Handles all Z-Wave commands we don't know we are interested in
+def zwaveEvent(physicalgraph.zwave.Command cmd) {
+    createEvent([:])
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////
 //                                 Device-Specific Methods                                 //
 /////////////////////////////////////////////////////////////////////////////////////////////
 def enableSceneCapture(value) {
 	log.debug("enableSceneCapture: ${value}")
-	state.sceneCapture=value
     sendEvent(name: "sceneCapture", value: value) 
 }
 
@@ -179,21 +196,30 @@ def buildOffOnEvent(cmd){
 
 def on() {
 	log.debug("on()")
+	sendEvent(name: "switch", value: "on", descriptionText: "$device.displayName was turned $value")
 	commands(buildOffOnEvent(0xFF), 3500)
 }
 
 def off() {
 	log.debug("off()")
+	sendEvent(name: "switch", value: "off", descriptionText: "$device.displayName was turned $value")
 	commands(buildOffOnEvent(0x00), 3500)
 }
 
-def setLevel(level) {
-	log.debug("setLevel(level:${level})")
-	setLevel(level, 1)
+def nextLevel() {
+	def level = device.latestValue("level") as Integer ?: 0
+	if (level <= 100) {
+		level = Math.min(25 * (Math.round(level / 25) + 1), 100) as Integer
+	}
+	else {
+		level = 25
+	}
+	setLevel(level)
 }
 
-def setLevel(level, duration) {
-	log.debug("setLevel(level:${level}, duration:${duration})")
+def setLevel(percent, rate=null) {
+	log.debug("setLevel(level:${percent})")
+    sendEvent(name: "level", value: percent == 99 ? 100 : percent , unit: "%")
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -206,12 +232,10 @@ private dimmerEvents(physicalgraph.zwave.Command cmd) {
     
 	def value = (cmd.value ? "on" : "off")
 	sendEvent(name: "switch", value: value, descriptionText: "$device.displayName was turned $value")
-	zone_members.each { sendEvent(it.toInteger(), [name: "switch", value: value, descriptionText: "$device.displayName was turned $value"]) }
-    
+
 	if (cmd.value) {
 		if (cmd.value>100) cmd.value=100
 		sendEvent(name: "level", value: cmd.value == 99 ? 100 : cmd.value , unit: "%")
-		zone_members.each { sendEvent(it.toInteger(), [name: "level", value: cmd.value == 99 ? 100 : cmd.value , unit: "%"]) }
 	}
 }
 
