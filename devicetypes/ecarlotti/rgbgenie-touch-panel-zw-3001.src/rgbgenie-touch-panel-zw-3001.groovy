@@ -13,7 +13,6 @@ metadata {
         
         command "SceneCapture"
         command "StopCapture"
-        command "SceneToggle"
 
 		attribute "associationsG1", "string"
         attribute "associationsG2", "string"
@@ -48,14 +47,11 @@ metadata {
 
 		childDeviceTiles("zones")
  
-// 		main(["status"])
+ 		main(["zones"])
 		details(["zones"])
-//		details(["zone1switch", "zone1level", "zone2switch", "zone2level", "zone3switch", "zone3level"])
-//		details(["zone1switch", "zone2switch", "zone3switch"])
     }
     
     preferences {
-    	section { input "switchesZ1", "capability.switch", title: "Zone 1 Devices", multiple: true, required: false, displayDuringSetup: true }
         input name: "associationsZ1", type: "string", description: "To add nodes to zone associations use the Hexadecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 1 Associations", required: false
         input name: "associationsZ2", type: "string", description: "To add nodes to zone associations use the Hexadecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 2 Associations", required: false
         input name: "associationsZ3", type: "string", description: "To add nodes to zone associations use the Hexadecimal nodeID from the IDE device list separated by commas into the space below", title: "Zone 3 Associations", required: false
@@ -89,7 +85,7 @@ def updated() {
             }
             def id = i * 16
             //addChildDevice("Momentary Button Tile", "${device.deviceNetworkId}-$id", null, [completedSetup: true, label: "${device.displayName} (Scene$i)", isComponent: true, componentName: "scene$i", componentLabel: "Scene $i"])
-            addChildDevice("RGBGenie Touch Panel Child ZW-3001", "${device.deviceNetworkId}-$id", null, [completedSetup: true, label: "${device.displayName} (Scene$i)", isComponent: true, componentName: "scene$i", componentLabel: "Scene $i"])
+            addChildDevice("On/Off/Toggle Button Tile", "${device.deviceNetworkId}-$id", null, [completedSetup: true, label: "${device.displayName} (Scene$i)", isComponent: true, componentName: "scene$i", componentLabel: "Scene $i"])
         } else if (device.label != state.oldLabel) {
         	// The Touch Panel component was RENAMED, rename the child devices accordingly
             children.each {
@@ -246,6 +242,7 @@ def StopCapture() {
 }
 
 def sceneActivate(sceneId) {
+	log.debug("sceneActivate(${sceneId}) called...")
    	def child=null
     def children=getChildDevices()
     children.each { 
@@ -255,8 +252,8 @@ def sceneActivate(sceneId) {
     }
     if (child) {
         def childName=child.getDisplayName()
-        log.debug("sceneActivate: Activating scene ${sceneId/16} on ${childName}")
-        child.push()
+        log.debug("sceneActivate: Toggling scene ${sceneId/16} state on ${childName}")
+        child.toggle()
     } else {
         log.error("sceneActivate: No child found to process sceneActivation for endpoint ${sceneId}")
     }
