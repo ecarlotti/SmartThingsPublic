@@ -51,10 +51,21 @@ def off() {
 	sendEvent(name: "switch", value: "off")
 }
 
+def off_nostatechange() {
+	log.debug("Turning switch OFF...")
+	sendEvent(name: "switch", value: "off", isStateChange: false, displayed: false)
+}
+
 def toggle() {
 	log.debug("toggle() called...")
 
-	if (device.latestState("switch").value == "off") {
+	def lval = device.latestValue("switch")
+    def lstate = device.latestState("switch")
+    
+	log.debug("device.latestValue(switch)=${lval}")
+	log.debug("device.latestState(switch)=${lstate}")
+    
+	if (lval == "off") {
      	on()
     } else {
     	off()

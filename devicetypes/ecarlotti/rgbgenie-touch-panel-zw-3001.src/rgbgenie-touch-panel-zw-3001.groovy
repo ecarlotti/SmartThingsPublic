@@ -9,7 +9,6 @@ metadata {
         capability "Refresh"
         capability "Actuator"
         capability "Configuration"
-        capability "Switch"
         
         command "SceneCapture"
         command "StopCapture"
@@ -21,9 +20,6 @@ metadata {
         attribute "capture1", "enum", ["on", "off"]
         attribute "capture2", "enum", ["on", "off"]
         attribute "capture3", "enum", ["on", "off"]
-        attribute "scene1", "enum", ["on", "off"]
-        attribute "scene2", "enum", ["on", "off"]
-        attribute "scene3", "enum", ["on", "off"]
         
 		fingerprint mfr:"0330", prod:"0301", model:"A109", deviceJoinName: "Touch Panel", role: 0x05
     }
@@ -47,7 +43,7 @@ metadata {
 
 		childDeviceTiles("zones")
  
- 		main(["zones"])
+ 		main(["status"])
 		details(["zones"])
     }
     
@@ -241,8 +237,30 @@ def StopCapture() {
 	sendEvent(name: "capture3", value: "off")	
 }
 
+def sceneDeactivateAllBut(sceneId) {
+	log.debug("deactivating all scenes but scene ${sceneId}...")
+
+	def child=null
+    def children=getChildDevices()
+    children.each { 
+    	if (it.getLabel().contains("Scene")) {
+        	// It IS a scene child device
+	        if (it.deviceNetworkId != "${device.deviceNetworkId}-${sceneId}") {
+            	// it is any other scene BUT the one being Activated - Turn it OFF
+    	        child=it
+                child.off_nostatechange()
+        	}
+        }
+    }
+}
+
 def sceneActivate(sceneId) {
 	log.debug("sceneActivate(${sceneId}) called...")
+    
+    // Turn off all other scenes (if there was an active one).
+    //   - There *MUST* be only one active scene at a time
+    sceneDeactivateAllBut(sceneId)
+    
    	def child=null
     def children=getChildDevices()
     children.each { 
