@@ -9,7 +9,6 @@ metadata {
         capability "Refresh"
         capability "Actuator"
         capability "Configuration"
-        capability "Button"
         capability "Switch"
         
         command "SceneCapture"
@@ -48,15 +47,6 @@ metadata {
         }
 
 		childDeviceTiles("zones")
-//		childDeviceTile("zone1switch", "zone1", decoration: "flat", width:6, height: 4, childTileName: "switch")
-//		childDeviceTile("zone1level", "zone1", decoration: "flat", width:6, height: 1, childTileName: "level")
-
-//		childDeviceTile("zone2switch", "zone2", decoration: "flat", width:6, height: 4, childTileName: "switch")
-//		childDeviceTile("zone2level", "zone2", decoration: "flat", width:6, height: 2, childTileName: "level")
-        
-//		childDeviceTile("zone3switch", "zone3", decoration: "flat", width:6, height: 4, childTileName: "switch")
-//		childDeviceTile("zone3level", "zone3", decoration: "flat", width:6, height: 2, childTileName: "level")
-        
  
 // 		main(["status"])
 		details(["zones"])
@@ -98,23 +88,21 @@ def updated() {
                 child.defineMe(i)
             }
             def id = i * 16
-            addChildDevice("Momentary Button Tile", "${device.deviceNetworkId}-$id", null, [completedSetup: true, label: "${device.displayName} (Scene$i)", isComponent: true, componentName: "scene$i", componentLabel: "Scene $i"])
+            //addChildDevice("Momentary Button Tile", "${device.deviceNetworkId}-$id", null, [completedSetup: true, label: "${device.displayName} (Scene$i)", isComponent: true, componentName: "scene$i", componentLabel: "Scene $i"])
+            addChildDevice("RGBGenie Touch Panel Child ZW-3001", "${device.deviceNetworkId}-$id", null, [completedSetup: true, label: "${device.displayName} (Scene$i)", isComponent: true, componentName: "scene$i", componentLabel: "Scene $i"])
         } else if (device.label != state.oldLabel) {
         	// The Touch Panel component was RENAMED, rename the child devices accordingly
             children.each {
             	def oldLabel = it.getLabel()
-                def newLabel = oldLabel.contains("Zone") ? "${device.displayName} (Zone${zoneNumber(it.deviceNetworkId)})" : "${device.displayName} (Scene${zoneNumber(it.deviceNetworkId)})" 
+                def newLabel = oldLabel.contains("Zone") ? "${device.displayName} (Zone${zoneNumber(it.deviceNetworkId)})" : "${device.displayName} (Scene${sceneNumber(it.deviceNetworkId)})" 
                 it.setLabel(newLabel)
             }
             state.oldLabel = device.label
         }
-        addHubMultiChannel(i).each { cmds << it }
+        addHubMultiChannel(i).each { cmds << it }		// Zones
+        addHubMultiChannel(i*16).each { cmds << it }	// Scenes
     }
     
-    for (int id in switchesZ1*.deviceNetworkId) {
-    	log.debug("Zone1 has device id: ${it.deviceNetworkId}")
-    }
-
 	processAssociations().each { cmds << it }
     pollAssociations().each { cmds << it }
     log.debug "update: ${cmds}"
@@ -386,6 +374,11 @@ def getDevices(__zone) {
 /////////////////////////////////////////////////////////////////////////////////////////////
 private getDRIVER_VER() { "0.001" }
 private getCMD_CLASS_VERS() { [0x33:3,0x26:3,0x85:2,0x8E:2,0x71:8,0x20:1] }
+
+private sceneNumber(String dni) {
+	def sn = dni.split("-")[-1] as Integer
+    return sn/16
+}
 
 private zoneNumber(String dni) {
 	dni.split("-")[-1] as Integer
