@@ -37,8 +37,9 @@ metadata {
 	}
     
 	preferences {
-        input "device_ip", "text", title: "Device IP", required: false
-        input "device_port", "text", title: "Device Port", required: false
+        input "device_ip", "text", title: "Device IP", required: true
+        input "device_port", "text", title: "Device Port", required: true
+        input "device_id", "text", title: "Device ID", required: true
     }
     
     main "switch"
@@ -76,13 +77,13 @@ def parse(String description) {
 def on() {
 	log.debug "Executing 'on'"
     sonoff_on()
-	sendEvent(name: "switch", value: "on", descriptionText: "$device.displayName was turned $value")
+	sendEvent(name: "switch", value: "on", descriptionText: "$device.displayName was turned on")
 }
 
 def off() {
 	log.debug "Executing 'off'"
     sonoff_off()
-	sendEvent(name: "switch", value: "off", descriptionText: "$device.displayName was turned $value")
+	sendEvent(name: "switch", value: "off", descriptionText: "$device.displayName was turned off")
 }
 
 def levelChanging(options){
@@ -97,19 +98,19 @@ def levelChanging(options){
 	if (level<0) level=0 
 
 	sonoff_setLevel(level == 99 ? 100 : level)
-	sendEvent(name: "level", value: level == 99 ? 100 : level , unit: "%")
+	sendEvent(name: "level", value: level == 99 ? 100 : level , unit: "%", descriptionText: "$device.displayName level was set to ${percent}%")
 	if (level>0 && level<100) {
-		if (device.currentValue("switch")=="off") sendEvent(name: "switch", value: "on")
+		if (device.currentValue("switch")=="off") sendEvent(name: "switch", value: "on", descriptionText: "$device.displayName was turned on")
 		runIn(1, "levelChanging", [data: [upDown: options.upDown, level: level]])
 	} else if (level==0) {
-		if (device.currentValue("switch")=="on") sendEvent(name: "switch", value: "off")
+		if (device.currentValue("switch")=="on") sendEvent(name: "switch", value: "off", descriptionText: "$device.displayName was turned off")
 	}
 }
 
 def setLevel(percent, rate=null) {
 	log.debug("setLevel(level:${percent})")
 	sonoff_setLevel(level == 99 ? 100 : level)
-    sendEvent(name: "level", value: percent == 99 ? 100 : percent , unit: "%")
+    sendEvent(name: "level", value: percent == 99 ? 100 : percent , unit: "%", descriptionText: "$device.displayName level was set to ${percent}%")
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -120,7 +121,7 @@ private sonoff_on() {
     def result = new physicalgraph.device.HubAction (
         method: "POST",
         path: "/zeroconf/switch",
-        body: '{ "deviceid": "", "data": { "switch": "on" } }',
+        body: '{ "deviceid": "${device_id}", "data": { "switch": "on" } }',
         headers: [ HOST: "${device_ip}:${device_port}" ]
     )
     sendHubCommand(result)
@@ -132,7 +133,7 @@ private sonoff_off() {
     def result = new physicalgraph.device.HubAction (
         method: "POST",
         path: "/zeroconf/switch",
-        body: '{ "deviceid": "", "data": { "switch": "off" } }',
+        body: '{ "deviceid": "${device_id}", "data": { "switch": "off" } }',
         headers: [ HOST: "${device_ip}:${device_port}" ]
     )
     sendHubCommand(result)
@@ -144,7 +145,7 @@ private sonoff_setLevel(level) {
     def result = new physicalgraph.device.HubAction (
         method: "POST",
         path: "/zeroconf/dimmable",
-        body: '{ "deviceid": "", "data": { "switch": "on", "brightness": ${level} } }',
+        body: '{ "deviceid": "${device_id}", "data": { "switch": "on", "brightness": ${level} } }',
         headers: [ HOST: "${device_ip}:${device_port}" ]
     )
     sendHubCommand(result)
